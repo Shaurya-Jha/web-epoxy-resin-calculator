@@ -28,3 +28,14 @@ module ResinCalculator
     # config.eager_load_paths << Rails.root.join("extras")
   end
 end
+
+# ## Copyright name
+#
+# The default copyright name is in the `config/application.rb` file.
+# The footer shows `© <current year> Resin Calculator`. Set the `COPYRIGHT_NAME`
+# environment variable to change the holder, for example:
+#
+# ```sh
+# COPYRIGHT_NAME="Your Name" bin/dev
+# ```
+#
