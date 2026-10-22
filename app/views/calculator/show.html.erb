@@ -1,0 +1,222 @@
+<% content_for :title, "Resin Calculator — get the mix right" %>
+
+<% valid = @calculation.valid? %>
+<% state = @submitted ? (valid ? :valid : :invalid) : :empty %>
+<% ratio_text = valid ? mix_ratio_text(@calculation) : "—" %>
+<% resin_share = valid ? mix_share(@calculation.resin_volume, @calculation.total_volume) : 50 %>
+
+<header class="site-header">
+  <span class="brand">
+    <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M16 4c5 6.5 9 11 9 15a9 9 0 1 1-18 0c0-4 4-8.5 9-15Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+      <path d="M11.5 20a4.5 4.5 0 0 0 3 4.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".55"/>
+    </svg>
+    <span class="brand__name">Resin <span>Calculator</span></span>
+  </span>
+  <span class="site-header__note">Volumes in ml · dimensions in cm</span>
+</header>
+
+<main>
+  <section class="hero">
+    <p class="eyebrow">Casting calculator</p>
+    <h1>Get the mix right,<br><em>first pour.</em></h1>
+    <p class="lede">Enter your mold, set your ratio and see exactly how much resin and hardener to pour — no guesswork, no wasted epoxy.</p>
+  </section>
+
+  <div class="workspace" data-controller="calculator">
+    <%= form_with url: root_path, method: :get, class: "card panel",
+                  data: { calculator_target: "form",
+                          action: "input->calculator#refresh change->calculator#refresh submit->calculator#preventSubmit" } do %>
+      <fieldset class="group">
+        <legend>Shape</legend>
+
+        <div class="shapes">
+          <% ResinCalculation::SHAPES.each do |key, label| %>
+            <label class="shape">
+              <%= radio_button_tag :shape, key, @calculation.shape == key,
+                                   id: "shape_#{key}", class: "shape__input" %>
+              <span class="shape__card">
+                <%= shape_icon(key) %>
+                <span><%= label %></span>
+              </span>
+            </label>
+          <% end %>
+        </div>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend>Dimensions</legend>
+
+        <div class="measures">
+          <% { length: "Length", width: "Width", diameter: "Diameter", height: "Height" }.each do |name, label| %>
+            <div class="field" data-calculator-target="dimensionField" data-dimension="<%= name %>">
+              <%= label_tag name, label, class: "label" %>
+              <div class="measure">
+                <%= number_field_tag name, tidy_number(@calculation.public_send(name)),
+                                     id: name, step: "any", min: 0, placeholder: "0",
+                                     inputmode: "decimal", class: "input" %>
+                <span class="measure__unit">cm</span>
+              </div>
+            </div>
+          <% end %>
+        </div>
+
+        <noscript>
+          <p class="hint">Only the fields used by your selected shape are counted.</p>
+        </noscript>
+      </fieldset>
+
+      <div class="row">
+        <div class="field">
+          <%= label_tag :quantity, "Pieces", class: "label" %>
+          <div class="stepper">
+            <button type="button" class="stepper__btn" data-calculator-target="jsOnly"
+                    data-action="calculator#decrement" aria-label="Remove one piece" hidden>−</button>
+            <%= number_field_tag :quantity, @calculation.quantity.to_i,
+                                 id: :quantity, min: 1, step: 1, inputmode: "numeric",
+                                 class: "input stepper__input" %>
+            <button type="button" class="stepper__btn" data-calculator-target="jsOnly"
+                    data-action="calculator#increment" aria-label="Add one piece" hidden>+</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="label-row">
+            <%= label_tag :waste_percent, "Waste margin", class: "label" %>
+            <output class="waste-value" for="waste_percent" data-calculator-target="wasteOutput"><%= tidy_number(@calculation.waste_percent) %>%</output>
+          </div>
+          <%= range_field_tag :waste_percent, tidy_number(@calculation.waste_percent),
+                              id: :waste_percent, min: 0, max: 50, step: 1, class: "range" %>
+        </div>
+      </div>
+
+      <fieldset class="group">
+        <legend>Mix ratio <span class="legend-note">by volume</span></legend>
+
+        <div class="ratio-chips" data-calculator-target="jsOnly" hidden>
+          <% %w[1 2 3 4].each do |resin| %>
+            <button type="button" class="chip" data-calculator-target="ratioChip"
+                    data-action="calculator#chooseRatio"
+                    data-resin="<%= resin %>" data-hardener="1" aria-pressed="false">
+              <%= resin %> : 1
+            </button>
+          <% end %>
+        </div>
+
+        <div class="ratio">
+          <div class="field">
+            <%= label_tag :resin_parts, "Resin", class: "label" %>
+            <%= number_field_tag :resin_parts, tidy_number(@calculation.resin_parts),
+                                 id: :resin_parts, step: "any", min: 0,
+                                 inputmode: "decimal", class: "input" %>
+          </div>
+          <span class="ratio__colon" aria-hidden="true">:</span>
+          <div class="field">
+            <%= label_tag :hardener_parts, "Hardener", class: "label" %>
+            <%= number_field_tag :hardener_parts, tidy_number(@calculation.hardener_parts),
+                                 id: :hardener_parts, step: "any", min: 0,
+                                 inputmode: "decimal", class: "input" %>
+          </div>
+        </div>
+
+        <p class="hint">Most kits print the ratio on the bottle — check before you pour.</p>
+      </fieldset>
+
+      <div class="actions">
+        <%= submit_tag "Calculate mix", class: "button", data: { calculator_target: "submit" } %>
+      </div>
+    <% end %>
+
+    <aside class="card result-card" aria-labelledby="result-title">
+      <div class="result-card__head">
+        <h2 id="result-title">Your mix</h2>
+        <span class="badge" data-calculator-target="ratioBadge"><%= valid ? "#{ratio_text} by volume" : "by volume" %></span>
+      </div>
+
+      <div class="result-empty" data-calculator-target="empty" <%= "hidden" unless state == :empty %>>
+        <svg class="result-empty__icon" viewBox="0 0 64 64" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M24 8h16M27 8v14L14 46a8 8 0 0 0 7 12h22a8 8 0 0 0 7-12L37 22V8"/>
+          <path d="M20 40h24" opacity=".5"/>
+          <path d="M18 48h28" opacity=".3"/>
+        </svg>
+        <p class="result-empty__title" data-calculator-target="emptyTitle">Your amounts land here</p>
+        <p class="result-empty__text" data-calculator-target="emptyText">Add your dimensions, then press calculate.</p>
+      </div>
+
+      <div class="result-error" data-calculator-target="error" role="alert" <%= "hidden" unless state == :invalid %>>
+        <p class="result-error__title">Check these values</p>
+        <ul data-calculator-target="errorList">
+          <% if state == :invalid %>
+            <% @calculation.errors.each do |message| %>
+              <li><%= message %></li>
+            <% end %>
+          <% end %>
+        </ul>
+      </div>
+
+      <div class="result-body" data-calculator-target="body" aria-live="polite" <%= "hidden" unless state == :valid %>>
+        <p class="result-body__label">Total to mix</p>
+        <p class="total" data-calculator-target="total"><%= valid ? ml(@calculation.total_volume) : "—" %></p>
+
+        <div class="bar" aria-hidden="true">
+          <span class="bar__resin" data-calculator-target="barResin" style="width: <%= resin_share %>%"></span>
+          <span class="bar__hardener" data-calculator-target="barHardener" style="width: <%= 100 - resin_share %>%"></span>
+        </div>
+        <div class="bar-legend">
+          <span class="legend legend--resin"><i></i>Resin <b data-calculator-target="resinShare"><%= resin_share %>%</b></span>
+          <span class="legend legend--hardener"><i></i>Hardener <b data-calculator-target="hardenerShare"><%= 100 - resin_share %>%</b></span>
+        </div>
+
+        <div class="amounts">
+          <div class="amount amount--resin">
+            <span class="amount__label">Resin</span>
+            <strong class="amount__value" data-calculator-target="resin"><%= valid ? ml(@calculation.resin_volume) : "—" %></strong>
+          </div>
+          <div class="amount amount--hardener">
+            <span class="amount__label">Hardener</span>
+            <strong class="amount__value" data-calculator-target="hardener"><%= valid ? ml(@calculation.hardener_volume) : "—" %></strong>
+          </div>
+        </div>
+
+        <dl class="details">
+          <div>
+            <dt>Per piece</dt>
+            <dd data-calculator-target="perPiece"><%= valid ? ml(@calculation.volume_per_piece) : "—" %></dd>
+          </div>
+          <div>
+            <dt>Pieces</dt>
+            <dd data-calculator-target="pieces"><%= valid ? @calculation.quantity.to_i : "—" %></dd>
+          </div>
+          <div>
+            <dt>Waste included</dt>
+            <dd data-calculator-target="waste"><%= valid ? "#{tidy_number(@calculation.waste_percent)}%" : "—" %></dd>
+          </div>
+        </dl>
+
+        <button type="button" class="button button--ghost" data-calculator-target="jsOnly copy"
+                data-action="calculator#copy" hidden>
+          Copy mix
+        </button>
+
+        <details class="how">
+          <summary>How this is calculated</summary>
+          <p>Volume from your shape, multiplied by pieces and waste, then split by the mix ratio. 1 ml = 1 cm³.</p>
+          <ul>
+            <li>Box: length × width × height</li>
+            <li>Cylinder: π × radius² × height</li>
+            <li>Sphere: 4⁄3 × π × radius³</li>
+          </ul>
+        </details>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer__row">
+    <span>Estimates assume 1 ml = 1 cm³. Mix ratios are applied by volume.</span>
+    <span>Round up a little when measuring.</span>
+  </div>
+  <p class="site-footer__legal"><%= copyright_notice %>. All rights reserved.</p>
+</footer>
